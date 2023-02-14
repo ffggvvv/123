@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滑动验证码</title>
+    <style>
+        :root {
+            --iWidth: 50px;
+            --iHeight: 50px;
+        }
+
+        .wrapper {
+            width: 100%;
+            width: 500px;
+            margin: 0 auto;
+        }
+
+        /* 容器 */
+        .container {
+            position: relative;
+            width: 500px;
+            height: 300px;
+            box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            background-image: url("https://gd-hbimg.huaban.com/b67805f8a77982ad75ac4726d2d0b90d6eb685454f66a-Fpq171_fw658webp");
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+        }
+
+        /* 被校验区域 */
+        .container-move {
+            position: absolute;
+            width: var(--iWidth);
+            height: var(--iHeight);
+            top: 180px;
+            left: 0;
+            z-index: 3;
+            background-size: 500px 300px;
+            background-repeat: no-repeat;
+            background-image: url("https://gd-hbimg.huaban.com/b67805f8a77982ad75ac4726d2d0b90d6eb685454f66a-Fpq171_fw658webp");
+            background-position: -180px -200px;
+            box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.6);
+            cursor: pointer;
+        }
+
+        /* 校验区域 */
+        .container-empty {
+            position: absolute;
+            width: var(--iWidth);
+            height: var(--iHeight);
+            top: 180px;
+            left: 200px;
+            background: #fff;
+            z-index: 2;
+            opacity: .8;
+            box-shadow: inset 0 2px 5px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        /* 重置 */
+        .container-reset {
+            position: absolute;
+            top: 0;
+            right: 10px;
+            cursor: pointer;
+            user-select: none;
+            z-index: 1;
+            color: #fff;
+        }
+
+        /* 拖动条样式 */
+        .slider-control {
+            width: 500px;
+            height: 50px;
+            margin-top: 20px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            background: #f2f2f2;
+            box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 滑块 */
+        .slider {
+            width: var(--iWidth);
+            height: var(--iHeight);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: skyblue;
+            border-radius: 4px;
+            text-align: center;
+            line-height: var(--iHeight);
+            transition: all;
+            user-select: none;
+            z-index: 3;
+            cursor: pointer;
+        }
+
+        /* 滑块背景 */
+        .slider-shadow {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0;
+            height: 50px;
+            background: #fff;
+            z-index: 2;
+        }
+
+        /* 提示文案 */
+        .slider-info {
+            text-align: center;
+            color: rgba(102, 102, 102, 1);
+            margin: 0;
+            line-height: 50px;
+            user-select: none;
+        }
+
+        /* 过度动画 */
+        .transitionBox {
+            transition: all .3s ease-in
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <!-- 解锁容器 -->
+        <div class="container">
+            <div class="container-move"></div>
+            <div class="container-empty"></div>
+            <div class="container-reset">刷新</div>
+        </div>
+        <!-- 控制容器 -->
+        <div class="slider-control">
+            <p class="slider-info">按住左边按钮向右拖动完成上方图像验证</p>
+            <div class="slider">>></div>
+            <div class="slider-shadow"></div>
+        </div>
+        <p class="infomation"></p>
+    </div>
+
+
+    <script>
+        let sliderBox = getElement('slider'); // 滑动的块
+
+        let sliderShadow = getElement('slider-shadow'); // 滑动的阴影
+        let container = getElement("container"); // 最外层的盒子
+        let sliderMove = getElement("container-move"); // 解锁的块
+        let containerEmpty = getElement("container-empty"); // 解锁的位置
+
+        let infomation = getElement('infomation'); // 解锁提示
+        let containerReset = getElement('container-reset'); // 重置功能
+
+        let containerWidth = container.clientWidth; // 获取背景图的大小
+        let sliderMoveWidth = sliderMove.clientWidth; // 解锁的块的大小
+
+        let movePointer = containerEmpty.offsetLeft // 解锁的位置
+
+        let maxDistance = (containerWidth - sliderMoveWidth); // 根据背景和解锁块的宽度限制滑块移动最大的距离
+
+        let faultSize = 10; // 滑动距离的容错处理, 滑动距离- 10, +10 都可解锁
+
+        init()
+
+        containerReset.onclick = function () {
+            init()
+        }
+
+        /**
+         * 监听鼠标在sliderBox(滑动块)按下时 mousedowm, 并根据可视区左边的距离减去鼠标按下的距离, 获取到实际
+         * document的onmouseMove和mouseup事件,
+         * 获取鼠标滑动的位置
+        */
+        sliderBox.onmousedown = function (moveStart) {
+            let left = moveStart.clientX - sliderBox.offsetLeft; // 获取按下时元素距离可视区左边的位置 - 鼠标按下时的位置, 获取到鼠标距离元素边缘的位置
+            let lefta // 记录移动的距离
+            // 鼠标按下持续移动中
+            document.onmousemove = function (moveTo) {
+                // 如果不减去 left 那么就会导致鼠标一直在移动元素的左边框上, 也就会出现元素不跟着鼠标走的问题, 有偏差
+                lefta = moveTo.clientX - left; // 元素移动的距离
+                // 限制元素的移动距离，不能小于0, 或者大于最大宽度 - 元素本身的距离, 否则就初始化位置
+                if (lefta < 0) {
+                    lefta = 0;
+                } else if (maxDistance < lefta) {
+                    lefta = maxDistance;
+                }
+                sliderBox.style.left = lefta + 'px'
+                sliderMove.style.left = lefta + 'px'
+                // 因为滑块加了圆角的功能，所以要在这里加4px，让滑块刚好压住滑块背景，不加的话，放大的时候会比较突兀
+                sliderShadow.style.width = (lefta + 4) + 'px';
+            }
+
+            // 鼠标移动结束
+            document.onmouseup = function (moveEnd) {
+                // 解除document身上绑定的事件, 不让事件一直触发
+                document.onmousemove = null;
+                document.onmouseup = null;
+                // 判断滑动距离是否相同，这里的滑动距离允许10px的容错，所以在当被校验区域大于小于校验区域10px都可以校验通过
+                if (lefta >= movePointer - faultSize && lefta <= movePointer + faultSize) {
+                    success(true)
+                } else {
+                    success(false)
+                }
+
+                // 重置位置
+                addClassName("add", [sliderBox, sliderShadow, sliderMove])
+                sliderBox.style.left = 0 + 'px'
+                sliderMove.style.left = 0 + 'px'
+                sliderShadow.style.width = 0 + 'px';
+                infomation.innerText = ''
+                setTimeout(() => {
+                    addClassName("remove", [sliderBox, sliderShadow, sliderMove])
+                    init()
+                }, 400)
+            }
+        }
+
+        /* 结束添加过度动画类名 */
+        function addClassName(add, Div) {
+
+            Div.forEach(element => {
+                if (add == 'add') {
+                    element.classList.add("transitionBox")
+                } else {
+                    element.classList.remove("transitionBox")
+                }
+            });
+        }
+
+        //解锁的块鼠标事件=滑动的块鼠标事件
+        sliderMove.onmousedown = sliderBox.onmousedown
+
+
+        function success(valid) {
+            let text = valid ? '成功' : "失败"
+            infomation.innerText = `解锁${text}`
+            alert(`解锁${text}`)
+        }
+
+        /**
+         * 随机生成空白的位置, 并指定解锁块的高度
+         *  */
+        function init() {
+            const moveTop = Math.floor(Math.random() * 220); // 滑块随机生成的高度
+            const moveLeft = Math.floor(Math.random() * 350 + 60); // 滑块随机生成的left距离
+
+            movePointer = moveLeft // 重置滑块解锁的位置
+
+            sliderMove.style.top = moveTop + 'px'; // 初始化滑块位置
+
+            containerEmpty.style.top = moveTop + 'px'; // 初始化解锁区域
+            containerEmpty.style.left = moveLeft + 'px';
+
+            sliderShadow.style.width = 0 + 'px';
+
+            sliderMove.style.backgroundPosition = `-${moveLeft}px  -${moveTop}px`
+        }
+
+        function getElement(elName) {
+            return document.getElementsByClassName(elName)[0]
+        }
+    </script>
+</body>
+
+</html>
